@@ -1,0 +1,218 @@
+<?php
+include 'Server.php'; // Ensure this file connects to your database
+
+// Set timezone to Jamaica Time
+date_default_timezone_set('America/Jamaica');
+
+// Handle form submission
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Retrieve form data
+    $user_id = mysqli_real_escape_string($conn, $_POST['user_id']);
+    $room_id = mysqli_real_escape_string($conn, $_POST['room_id']);
+    $date = mysqli_real_escape_string($conn, $_POST['date']);
+    $start_time = mysqli_real_escape_string($conn, $_POST['start_time']);
+    $end_time = mysqli_real_escape_string($conn, $_POST['end_time']);
+    $number_of_personnel = mysqli_real_escape_string($conn, $_POST['number_of_personnel']);
+    $meeting_type = mysqli_real_escape_string($conn, $_POST['meeting_type']);
+    
+    // Validate User ID
+    $user_check_sql = "SELECT User_ID FROM User WHERE User_ID = ?";
+    $stmt = mysqli_prepare($conn, $user_check_sql);
+    mysqli_stmt_bind_param($stmt, "s", $user_id);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_store_result($stmt);
+    
+    if (mysqli_stmt_num_rows($stmt) === 0) {
+        die("Error: User ID not found.");
+    }
+    mysqli_stmt_close($stmt);
+
+    // Validate Room ID
+    $room_check_sql = "SELECT Room_ID FROM MeetingRoom WHERE Room_ID = ?";
+    $stmt = mysqli_prepare($conn, $room_check_sql);
+    mysqli_stmt_bind_param($stmt, "s", $room_id);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_store_result($stmt);
+
+    if (mysqli_stmt_num_rows($stmt) === 0) {
+        die("Error: Room ID not found.");
+    }
+    mysqli_stmt_close($stmt);
+
+    // Generate unique IDs
+    $scheduling_id = uniqid('sched_', true);
+    $booking_id = uniqid('book_', true);
+
+    // Insert into Bookings table
+    $booking_sql = "INSERT INTO Bookings (Booking_ID, Start_Time, End_Time, DATE_, Duration, Meeting_Type, Status, Number_Of_Personnel) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    $booking_stmt = mysqli_prepare($conn, $booking_sql);
+
+    if ($booking_stmt) {
+        $duration = "TBD";
+        $status = "TBD";
+        mysqli_stmt_bind_param($booking_stmt, "ssssssss", $booking_id, $start_time, $end_time, $date, $duration, $meeting_type, $status, $number_of_personnel);
+        
+        if (mysqli_stmt_execute($booking_stmt)) {
+            // Redirect to success page
+            //header("Location: PendingRequest.php"); // Update to your success page
+            //exit();
+        } else {
+            die("Error: " . mysqli_stmt_error($booking_stmt));
+        }
+        mysqli_stmt_close($booking_stmt);
+    } else {
+        die("Error preparing statement: " . mysqli_error($conn));
+    }
+
+    // Insert into Meeting_Scheduling table
+    $scheduling_sql = "INSERT INTO Meeting_Scheduling (Scheduling_ID, User_ID, Room_ID, Booking_ID, Start_Time, End_Time, DATE_, Meeting_Type, Number_Of_Personnel) 
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $scheduling_stmt = mysqli_prepare($conn, $scheduling_sql);
+
+    if ($scheduling_stmt) {
+        mysqli_stmt_bind_param($scheduling_stmt, "sssssssss", $scheduling_id, $user_id, $room_id, $booking_id, $start_time, $end_time, $date, $meeting_type, $number_of_personnel);
+        
+        if (mysqli_stmt_execute($scheduling_stmt)) {
+            // Redirect to success page
+            header("Location: PendingRequest.php");
+            exit();
+        } else {
+            die("Error: " . mysqli_stmt_error($scheduling_stmt));
+        }
+        mysqli_stmt_close($scheduling_stmt);
+    } else {
+        die("Error preparing statement: " . mysqli_error($conn));
+    }
+
+    // Close the database connection
+    mysqli_close($conn);
+}
+
+// Fetch Conference Rooms
+$rooms_sql = "SELECT Room_ID, Location FROM MeetingRoom";
+$rooms_result = mysqli_query($conn, $rooms_sql);
+
+if (!$rooms_result) {
+    die("Error fetching rooms: " . mysqli_error($conn));
+}
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book a Meeting</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-image: url("../images/Background.jpg");
+            background-size: cover; /* Ensures the background image covers the entire body */
+            background-position: center; /* Center the background image */
+            color: #333;
+        }
+        .container {
+            margin-top: 50px;
+            background-color: rgba(255, 255, 255, 0.9); /* Slightly transparent white background */
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .form-group label {
+            font-weight: bold;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+        .form-group input[type="submit"] {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .form-group input[type="submit"]:hover {
+            background-color: #0056b3;
+        }
+        .form-group input[type="date"],
+        .form-group input[type="time"],
+        .form-group input[type="number"] {
+            display: inline-block;
+            width: calc(50% - 5px);
+            margin-right: 10px;
+        }
+        .form-group input[type="time"] {
+            margin-right: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <h1 class="text-center mb-4">Book a Meeting</h1>
+
+                <form action="" method="post">
+                    <div class="form-group">
+                        <label for="user_id">User ID</label>
+                        <input type="text" id="user_id" name="user_id" placeholder="Enter your ID" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="room_id">Select Meeting Room</label>
+                        <select id="room_id" name="room_id" class="form-control" required>
+                            <?php
+                            // Populate dropdown with conference rooms
+                            while ($room = mysqli_fetch_assoc($rooms_result)) {
+                                echo "<option value='" . htmlspecialchars($room['Room_ID']) . "'>" . htmlspecialchars($room['Room_ID']) . " - " . htmlspecialchars($room['Location']) . "</option>";
+                            }
+                            ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="meeting_type">Meeting Type</label>
+                       <input type="text" id="meeting_type" name="meeting_type"  placeholder="Enter Meeting type" class="form-control" required>
+                    </div>
+
+                     <div class="form-group">
+                        <label for="date">Select Date</label>
+                        <input type="date" id="date" name="date" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="start_time">Start Time</label>
+                        <input type="time" id="start_time" name="start_time" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="end_time">End Time</label>
+                        <input type="time" id="end_time" name="end_time" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="number_of_personnel">Number of Attendees</label>
+                        <input type="number" id="number_of_personnel" name="number_of_personnel" min="1" placeholder="Enter number of people" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <input type="submit" value="Book Meeting" class="btn btn-primary">
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
